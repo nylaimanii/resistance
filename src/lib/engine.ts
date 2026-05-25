@@ -4,6 +4,10 @@ export const GROWTH_RATE = 0.3;
 export const RESISTANT_THRESHOLD = 0.5;
 export const KILL_STEEPNESS = 12;
 export const DECAY_FLOOR = 0.001;
+// saturation kill: at sustained near-max drug, even max-resistance cells get ground down.
+// only kicks in for drug >= SATURATION_FLOOR — partial / decaying doses are unaffected.
+export const SATURATION_FLOOR = 0.95;
+export const SATURATION_MAX_KILL = 0.5;
 
 export function totalPopulation(buckets: ResistanceBucket[]): number {
   let sum = 0;
@@ -64,9 +68,16 @@ export function stepSelection(state: SimState): SimState {
   const drug = state.drugConcentration;
   if (drug <= 0) return state;
 
+  // saturation multiplier: 1 (no effect) below SATURATION_FLOOR, ramps to
+  // (1 - SATURATION_MAX_KILL) at drug=1.0. unchanged for partial doses.
+  const sat =
+    drug >= SATURATION_FLOOR ? (drug - SATURATION_FLOOR) / (1 - SATURATION_FLOOR) : 0;
+  const saturationFactor = 1 - SATURATION_MAX_KILL * sat;
+
   const buckets: ResistanceBucket[] = state.buckets.map((b) => {
     // sigmoid: survival ~1 when level >= drug, ~0 when level < drug, sharp transition at level == drug
-    const survival = 1 / (1 + Math.exp(KILL_STEEPNESS * (drug - b.level)));
+    const base = 1 / (1 + Math.exp(KILL_STEEPNESS * (drug - b.level)));
+    const survival = base * saturationFactor;
     return { level: b.level, count: Math.max(0, Math.round(b.count * survival)) };
   });
 

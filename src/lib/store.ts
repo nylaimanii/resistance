@@ -45,16 +45,16 @@ export const useSimStore = create<SimStore>((set) => ({
 
   step: () =>
     set((state) => {
-      // full tick: growth → mutation → (re-apply if doseActive) → selection → decay
+      // full tick: growth → mutation → (pin drug to full strength if doseActive) → selection → (decay only if course is OFF)
+      // pinning before selection means the course-active dose isn't shaved by decay before it acts.
+      // skipping decay while active keeps the stored concentration at params.doseStrength.
       const a = stepGrowth(state);
       const b = stepMutation(a);
-      // sustained course: top concentration back up to params.doseStrength before selection,
-      // so even the resistant stragglers keep facing the full dose
       const beforeSel = state.doseActive
         ? { ...b, drugConcentration: state.params.doseStrength }
         : b;
       const c = stepSelection(beforeSel);
-      const next = stepDecay(c);
+      const next = state.doseActive ? c : stepDecay(c);
 
       const nextTick = state.tick + 1;
       const prevPop = totalPopulation(state.buckets);
