@@ -13,6 +13,7 @@ import {
 
 const HISTORY_CAP = 300;
 const DEFAULT_TICK_INTERVAL_MS = 150;
+const DEFAULT_DIAGNOSIS_LAG_TICKS = 8;
 
 type SimActions = {
   // named `step` not `tick` so it doesn't collide with SimState.tick (the counter)
@@ -24,6 +25,7 @@ type SimActions = {
   stopDose: () => void;
   setParam: <K extends keyof SimParams>(key: K, value: SimParams[K]) => void;
   setTickInterval: (ms: number) => void;
+  setDiagnosisLag: (n: number) => void;
   reset: () => void;
 };
 
@@ -37,6 +39,7 @@ function initialState(): SimState {
     doseActive: false,
     running: false,
     tickIntervalMs: DEFAULT_TICK_INTERVAL_MS,
+    diagnosisLagTicks: DEFAULT_DIAGNOSIS_LAG_TICKS,
     params: { ...DEFAULT_PARAMS },
     history: [],
     events: [],
@@ -134,7 +137,13 @@ export const useSimStore = create<SimStore>((set) => ({
 
   setTickInterval: (ms: number) => set({ tickIntervalMs: ms }),
 
-  // preserve tickIntervalMs across reset — speed is a presenter preference, not sim state
+  setDiagnosisLag: (n: number) => set({ diagnosisLagTicks: n }),
+
+  // preserve presenter prefs across reset (speed + diagnosis lag are not sim state)
   reset: () =>
-    set((state) => ({ ...initialState(), tickIntervalMs: state.tickIntervalMs })),
+    set((state) => ({
+      ...initialState(),
+      tickIntervalMs: state.tickIntervalMs,
+      diagnosisLagTicks: state.diagnosisLagTicks,
+    })),
 }));

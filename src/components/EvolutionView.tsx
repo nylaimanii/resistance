@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -165,21 +164,7 @@ function ActionRow() {
   );
 }
 
-function useTickLoop() {
-  const running = useSimStore((s) => s.running);
-  const tickIntervalMs = useSimStore((s) => s.tickIntervalMs);
-  const step = useSimStore((s) => s.step);
-
-  useEffect(() => {
-    if (!running) return;
-    const id = setInterval(step, tickIntervalMs);
-    return () => clearInterval(id);
-  }, [running, tickIntervalMs, step]);
-}
-
 export default function EvolutionView() {
-  useTickLoop();
-
   const tick = useSimStore((s) => s.tick);
   const buckets = useSimStore((s) => s.buckets);
   const drugConcentration = useSimStore((s) => s.drugConcentration);

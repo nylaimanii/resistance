@@ -32,6 +32,8 @@ export type SimState = {
   running: boolean;
   // ms between sim ticks — presenter preference, preserved across reset()
   tickIntervalMs: number;
+  // diagnosis panel reads history this many ticks back (deliberate "culture takes days" lag)
+  diagnosisLagTicks: number;
   params: SimParams;
   history: SimSnapshot[];
   events: SimEvent[];

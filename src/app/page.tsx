@@ -1,5 +1,5 @@
-import EvolutionView from "@/components/EvolutionView";
+import ResistanceApp from "@/components/ResistanceApp";
 
 export default function Home() {
-  return <EvolutionView />;
+  return <ResistanceApp />;
 }
