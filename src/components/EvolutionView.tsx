@@ -1,11 +1,15 @@
 "use client";
 
+import { useEffect } from "react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { resistantFraction, totalPopulation } from "@/lib/engine";
 import { useSimStore } from "@/lib/store";
 import type { SimParams } from "@/lib/types";
+
+const TICK_MS = 150;
 
 type SliderSpec = {
   key: keyof SimParams;
@@ -89,7 +93,56 @@ function Readout({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ActionRow() {
+  const running = useSimStore((s) => s.running);
+  const doseStrength = useSimStore((s) => s.params.doseStrength);
+  const drugConcentration = useSimStore((s) => s.drugConcentration);
+  const start = useSimStore((s) => s.start);
+  const pause = useSimStore((s) => s.pause);
+  const deployDrug = useSimStore((s) => s.deployDrug);
+  const stopDose = useSimStore((s) => s.stopDose);
+  const reset = useSimStore((s) => s.reset);
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button onClick={() => (running ? pause() : start())}>
+        {running ? "pause" : "play"}
+      </Button>
+      <Button
+        variant="secondary"
+        onClick={() => deployDrug(doseStrength)}
+        disabled={doseStrength === 0}
+      >
+        deploy antibiotic
+      </Button>
+      <Button
+        variant="outline"
+        onClick={stopDose}
+        disabled={drugConcentration === 0}
+      >
+        stop dose
+      </Button>
+      <Button variant="ghost" onClick={reset}>
+        reset
+      </Button>
+    </div>
+  );
+}
+
+function useTickLoop() {
+  const running = useSimStore((s) => s.running);
+  const step = useSimStore((s) => s.step);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(step, TICK_MS);
+    return () => clearInterval(id);
+  }, [running, step]);
+}
+
 export default function EvolutionView() {
+  useTickLoop();
+
   const tick = useSimStore((s) => s.tick);
   const buckets = useSimStore((s) => s.buckets);
   const drugConcentration = useSimStore((s) => s.drugConcentration);
@@ -115,6 +168,9 @@ export default function EvolutionView() {
             {SLIDERS.map((spec) => (
               <ParamSlider key={spec.key} spec={spec} />
             ))}
+            <div className="pt-2">
+              <ActionRow />
+            </div>
           </CardContent>
         </Card>
 

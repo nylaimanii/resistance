@@ -16,6 +16,9 @@ const HISTORY_CAP = 300;
 type SimActions = {
   // named `step` not `tick` so it doesn't collide with SimState.tick (the counter)
   step: () => void;
+  // loop control (separate from `stopDose`, which controls the drug)
+  start: () => void;
+  pause: () => void;
   deployDrug: (strength: number) => void;
   stopDose: () => void;
   setParam: <K extends keyof SimParams>(key: K, value: SimParams[K]) => void;
@@ -80,8 +83,14 @@ export const useSimStore = create<SimStore>((set) => ({
       const history = [...state.history, snapshot].slice(-HISTORY_CAP);
       const events = newEvents.length > 0 ? [...state.events, ...newEvents] : state.events;
 
-      return { ...next, tick: nextTick, history, events };
+      // auto-pause when cleared so the loop doesn't spin on a dead population
+      const running = newPop === 0 ? false : state.running;
+
+      return { ...next, tick: nextTick, history, events, running };
     }),
+
+  start: () => set({ running: true }),
+  pause: () => set({ running: false }),
 
   deployDrug: (strength: number) =>
     set((state) => ({
