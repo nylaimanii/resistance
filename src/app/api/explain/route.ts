@@ -7,18 +7,24 @@ export const runtime = "nodejs";
 
 type Mode = "quick" | "deep";
 
+type Trend = "rising" | "falling" | "stable";
+type Phase = "growing" | "under_treatment" | "rebounding" | "cleared";
+
 type SimContext = {
   tick: number;
   population: number;
   resistantFraction: number;
   drugConcentration: number;
   doseActive: boolean;
+  trend?: Trend;
+  phase?: Phase;
   params: {
     mutationRate: number;
     doseStrength: number;
     carryingCapacity: number;
     doseDecay: number;
   };
+  recentEvents?: { tick: number; kind: string; note: string }[];
   recentHistory: { tick: number; population: number; resistantFraction: number }[];
 };
 
@@ -42,6 +48,10 @@ The simulation models a bacterial population as a distribution over resistance l
 
 You will receive the CURRENT state of THIS user's simulation in JSON. Reason about THEIR numbers, not generic facts. Cite specific values (e.g. "resistance is at 38%", "you stopped the dose at tick 42").
 
+The state includes a computed "trend" (rising / falling / stable, based on the last ~10 ticks) and a "phase" (growing / under_treatment / rebounding / cleared), plus the most recent 1-2 events. Treat these as ground truth: do NOT contradict them. If trend is "stable", do not say resistance is climbing. If phase is "cleared", do not talk about ongoing dynamics. Use recentEvents to know what the user actually did and when.
+
+If the user's question is gibberish, empty, or clearly unrelated to the simulation (e.g. random characters, off-topic chit-chat), reply with a single short sentence like "i'm not sure what you're asking — try one of the suggested questions" and do NOT dump the state summary.
+
 Rules:
 - 2 to 4 short sentences. No markdown headings, no bullet lists.
 - If a number is missing or zero, say so plainly.
@@ -59,13 +69,23 @@ function formatContext(s: SimContext): string {
         )}`
     )
     .join("\n");
+  const events =
+    (s.recentEvents ?? []).length === 0
+      ? "  (none)"
+      : (s.recentEvents ?? [])
+          .map((e) => `  tick ${e.tick}: ${e.kind} — ${e.note}`)
+          .join("\n");
   return [
     `current tick: ${s.tick}`,
+    `phase: ${s.phase ?? "unknown"}`,
+    `trend (last ~10 ticks of resistantFraction): ${s.trend ?? "unknown"}`,
     `population: ${s.population.toLocaleString()}`,
     `resistant fraction: ${pct(s.resistantFraction)}`,
     `drug concentration: ${s.drugConcentration.toFixed(3)}`,
     `dose course active: ${s.doseActive ? "yes" : "no"}`,
     `params: mutationRate=${s.params.mutationRate}, doseStrength=${s.params.doseStrength}, doseDecay=${s.params.doseDecay}, carryingCapacity=${s.params.carryingCapacity}`,
+    `recent events:`,
+    events,
     `recent history:`,
     recent || "  (none yet)",
   ].join("\n");

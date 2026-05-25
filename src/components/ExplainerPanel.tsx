@@ -32,14 +32,43 @@ export default function ExplainerPanel() {
     // pull a compact snapshot from the store AT SEND TIME so the answer reflects current state.
     // we do NOT send the whole buckets array — just summary numbers + a few recent points.
     const state = useSimStore.getState();
+    const population = totalPopulation(state.buckets);
+    const resFrac = resistantFraction(state.buckets);
+
+    // trend: compare resistantFraction now vs ~10 ticks ago. ±2 percentage points = "stable".
+    const hist = state.history;
+    const past = hist[Math.max(0, hist.length - 11)];
+    let trend: "rising" | "falling" | "stable" = "stable";
+    if (past) {
+      const delta = resFrac - past.resistantFraction;
+      if (delta > 0.02) trend = "rising";
+      else if (delta < -0.02) trend = "falling";
+    }
+
+    // phase: one-word state hint.
+    let phase: "growing" | "under_treatment" | "rebounding" | "cleared";
+    if (population === 0) phase = "cleared";
+    else if (state.doseActive) phase = "under_treatment";
+    else if (state.drugConcentration > 0) phase = "rebounding";
+    else phase = "growing";
+
+    const recentEvents = state.events.slice(-2).map((e) => ({
+      tick: e.tick,
+      kind: e.kind,
+      note: e.note,
+    }));
+
     const simState = {
       tick: state.tick,
-      population: totalPopulation(state.buckets),
-      resistantFraction: resistantFraction(state.buckets),
+      population,
+      resistantFraction: resFrac,
       drugConcentration: state.drugConcentration,
       doseActive: state.doseActive,
+      trend,
+      phase,
       params: state.params,
-      recentHistory: state.history.slice(-8).map((h) => ({
+      recentEvents,
+      recentHistory: hist.slice(-8).map((h) => ({
         tick: h.tick,
         population: h.population,
         resistantFraction: h.resistantFraction,
