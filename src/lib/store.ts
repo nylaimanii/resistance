@@ -1,6 +1,9 @@
 import { create } from "zustand";
-import type { SimParams, SimState } from "./types";
+import type { SimParams, SimSnapshot, SimState } from "./types";
 import { DEFAULT_PARAMS, makeInitialBuckets } from "./defaults";
+import { stepGrowth, totalPopulation } from "./engine";
+
+const HISTORY_CAP = 300;
 
 type SimActions = {
   // named `step` not `tick` so it doesn't collide with SimState.tick (the counter)
@@ -28,9 +31,20 @@ function initialState(): SimState {
 export const useSimStore = create<SimStore>((set) => ({
   ...initialState(),
 
-  step: () => {
-    // TODO step 4-6: logistic growth, mutation, selection, dose decay
-  },
+  step: () =>
+    set((state) => {
+      // TODO step 5-6: mutation, selection, dose decay
+      const grown = stepGrowth(state);
+      const nextTick = state.tick + 1;
+      const snapshot: SimSnapshot = {
+        tick: nextTick,
+        population: totalPopulation(grown.buckets),
+        resistantFraction: 0, // placeholder until step 5
+        drugConcentration: grown.drugConcentration,
+      };
+      const history = [...state.history, snapshot].slice(-HISTORY_CAP);
+      return { ...grown, tick: nextTick, history };
+    }),
 
   deployDrug: () => {
     // TODO step 4-6: set drugConcentration from params.doseStrength + log event
