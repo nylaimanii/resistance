@@ -30,6 +30,8 @@ export type SimState = {
   // doseActive = "still taking the antibiotic" — re-applies the dose each tick until stopDose
   doseActive: boolean;
   running: boolean;
+  // ms between sim ticks — presenter preference, preserved across reset()
+  tickIntervalMs: number;
   params: SimParams;
   history: SimSnapshot[];
   events: SimEvent[];

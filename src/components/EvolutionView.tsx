@@ -18,8 +18,6 @@ const DistributionChart = dynamic(() => import("@/components/DistributionChart")
 import { useSimStore } from "@/lib/store";
 import type { SimParams } from "@/lib/types";
 
-const TICK_MS = 150;
-
 type SliderSpec = {
   key: keyof SimParams;
   label: string;
@@ -102,6 +100,39 @@ function Readout({ label, value }: { label: string; value: string }) {
   );
 }
 
+const SPEED_PRESETS: { label: string; ms: number }[] = [
+  { label: "0.5×", ms: 300 },
+  { label: "1×", ms: 150 },
+  { label: "2×", ms: 75 },
+  { label: "4×", ms: 37 },
+];
+
+function SpeedControl() {
+  const tickIntervalMs = useSimStore((s) => s.tickIntervalMs);
+  const setTickInterval = useSimStore((s) => s.setTickInterval);
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">speed</span>
+      <div className="flex gap-1">
+        {SPEED_PRESETS.map((p) => {
+          const active = tickIntervalMs === p.ms;
+          return (
+            <Button
+              key={p.label}
+              size="sm"
+              variant={active ? "default" : "outline"}
+              onClick={() => setTickInterval(p.ms)}
+            >
+              {p.label}
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ActionRow() {
   const running = useSimStore((s) => s.running);
   const doseStrength = useSimStore((s) => s.params.doseStrength);
@@ -136,13 +167,14 @@ function ActionRow() {
 
 function useTickLoop() {
   const running = useSimStore((s) => s.running);
+  const tickIntervalMs = useSimStore((s) => s.tickIntervalMs);
   const step = useSimStore((s) => s.step);
 
   useEffect(() => {
     if (!running) return;
-    const id = setInterval(step, TICK_MS);
+    const id = setInterval(step, tickIntervalMs);
     return () => clearInterval(id);
-  }, [running, step]);
+  }, [running, tickIntervalMs, step]);
 }
 
 export default function EvolutionView() {
@@ -175,8 +207,9 @@ export default function EvolutionView() {
             {SLIDERS.map((spec) => (
               <ParamSlider key={spec.key} spec={spec} />
             ))}
-            <div className="pt-2">
+            <div className="space-y-3 pt-2">
               <ActionRow />
+              <SpeedControl />
             </div>
           </CardContent>
         </Card>

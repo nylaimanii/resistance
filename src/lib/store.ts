@@ -12,6 +12,7 @@ import {
 } from "./engine";
 
 const HISTORY_CAP = 300;
+const DEFAULT_TICK_INTERVAL_MS = 150;
 
 type SimActions = {
   // named `step` not `tick` so it doesn't collide with SimState.tick (the counter)
@@ -22,6 +23,7 @@ type SimActions = {
   deployDrug: (strength: number) => void;
   stopDose: () => void;
   setParam: <K extends keyof SimParams>(key: K, value: SimParams[K]) => void;
+  setTickInterval: (ms: number) => void;
   reset: () => void;
 };
 
@@ -34,6 +36,7 @@ function initialState(): SimState {
     drugConcentration: 0,
     doseActive: false,
     running: false,
+    tickIntervalMs: DEFAULT_TICK_INTERVAL_MS,
     params: { ...DEFAULT_PARAMS },
     history: [],
     events: [],
@@ -129,5 +132,9 @@ export const useSimStore = create<SimStore>((set) => ({
       params: { ...state.params, [key]: value },
     })),
 
-  reset: () => set(initialState()),
+  setTickInterval: (ms: number) => set({ tickIntervalMs: ms }),
+
+  // preserve tickIntervalMs across reset — speed is a presenter preference, not sim state
+  reset: () =>
+    set((state) => ({ ...initialState(), tickIntervalMs: state.tickIntervalMs })),
 }));
