@@ -2,6 +2,8 @@ import type { ResistanceBucket, SimState } from "./types";
 
 export const GROWTH_RATE = 0.3;
 export const RESISTANT_THRESHOLD = 0.5;
+export const KILL_STEEPNESS = 12;
+export const DECAY_FLOOR = 0.001;
 
 export function totalPopulation(buckets: ResistanceBucket[]): number {
   let sum = 0;
@@ -56,4 +58,23 @@ export function resistantFraction(buckets: ResistanceBucket[]): number {
   let resistant = 0;
   for (const b of buckets) if (b.level >= RESISTANT_THRESHOLD) resistant += b.count;
   return resistant / total;
+}
+
+export function stepSelection(state: SimState): SimState {
+  const drug = state.drugConcentration;
+  if (drug <= 0) return state;
+
+  const buckets: ResistanceBucket[] = state.buckets.map((b) => {
+    // sigmoid: survival ~1 when level >= drug, ~0 when level < drug, sharp transition at level == drug
+    const survival = 1 / (1 + Math.exp(KILL_STEEPNESS * (drug - b.level)));
+    return { level: b.level, count: Math.max(0, Math.round(b.count * survival)) };
+  });
+
+  return { ...state, buckets };
+}
+
+export function stepDecay(state: SimState): SimState {
+  let next = state.drugConcentration * (1 - state.params.doseDecay);
+  if (next < DECAY_FLOOR) next = 0;
+  return { ...state, drugConcentration: next };
 }

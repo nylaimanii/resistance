@@ -1,14 +1,22 @@
 import { create } from "zustand";
-import type { SimParams, SimSnapshot, SimState } from "./types";
+import type { SimEvent, SimParams, SimSnapshot, SimState } from "./types";
 import { DEFAULT_PARAMS, makeInitialBuckets } from "./defaults";
-import { resistantFraction, stepGrowth, stepMutation, totalPopulation } from "./engine";
+import {
+  RESISTANT_THRESHOLD,
+  resistantFraction,
+  stepDecay,
+  stepGrowth,
+  stepMutation,
+  stepSelection,
+  totalPopulation,
+} from "./engine";
 
 const HISTORY_CAP = 300;
 
 type SimActions = {
   // named `step` not `tick` so it doesn't collide with SimState.tick (the counter)
   step: () => void;
-  deployDrug: () => void;
+  deployDrug: (strength: number) => void;
   stopDose: () => void;
   setParam: <K extends keyof SimParams>(key: K, value: SimParams[K]) => void;
   reset: () => void;
@@ -33,27 +41,69 @@ export const useSimStore = create<SimStore>((set) => ({
 
   step: () =>
     set((state) => {
-      // TODO step 6: selection, dose decay
-      const grown = stepGrowth(state);
-      const mutated = stepMutation(grown);
+      // full tick: growth → mutation → selection → decay
+      const a = stepGrowth(state);
+      const b = stepMutation(a);
+      const c = stepSelection(b);
+      const next = stepDecay(c);
+
       const nextTick = state.tick + 1;
+      const prevPop = totalPopulation(state.buckets);
+      const newPop = totalPopulation(next.buckets);
+      const prevFrac = resistantFraction(state.buckets);
+      const newFrac = resistantFraction(next.buckets);
+
+      const newEvents: SimEvent[] = [];
+      const hasThresholdEvent = state.events.some((e) => e.kind === "threshold_crossed");
+      const hasClearedEvent = state.events.some((e) => e.kind === "cleared");
+      if (
+        !hasThresholdEvent &&
+        prevFrac < RESISTANT_THRESHOLD &&
+        newFrac >= RESISTANT_THRESHOLD
+      ) {
+        newEvents.push({
+          tick: nextTick,
+          kind: "threshold_crossed",
+          note: "resistance passed 50%",
+        });
+      }
+      if (!hasClearedEvent && prevPop > 0 && newPop === 0) {
+        newEvents.push({ tick: nextTick, kind: "cleared", note: "population cleared" });
+      }
+
       const snapshot: SimSnapshot = {
         tick: nextTick,
-        population: totalPopulation(mutated.buckets),
-        resistantFraction: resistantFraction(mutated.buckets),
-        drugConcentration: mutated.drugConcentration,
+        population: newPop,
+        resistantFraction: newFrac,
+        drugConcentration: next.drugConcentration,
       };
       const history = [...state.history, snapshot].slice(-HISTORY_CAP);
-      return { ...mutated, tick: nextTick, history };
+      const events = newEvents.length > 0 ? [...state.events, ...newEvents] : state.events;
+
+      return { ...next, tick: nextTick, history, events };
     }),
 
-  deployDrug: () => {
-    // TODO step 4-6: set drugConcentration from params.doseStrength + log event
-  },
+  deployDrug: (strength: number) =>
+    set((state) => ({
+      drugConcentration: strength,
+      events: [
+        ...state.events,
+        {
+          tick: state.tick,
+          kind: "drug_deployed",
+          note: `drug deployed at strength ${strength.toFixed(2)}`,
+        },
+      ],
+    })),
 
-  stopDose: () => {
-    // TODO step 4-6: log dose_stopped event (concentration keeps decaying)
-  },
+  stopDose: () =>
+    set((state) => ({
+      drugConcentration: 0,
+      events: [
+        ...state.events,
+        { tick: state.tick, kind: "dose_stopped", note: "dose stopped" },
+      ],
+    })),
 
   setParam: (key, value) =>
     set((state) => ({
