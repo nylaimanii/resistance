@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import DiagnosisView from "@/components/DiagnosisView";
 import EvolutionView from "@/components/EvolutionView";
+import ExplainerPanel from "@/components/ExplainerPanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSimStore } from "@/lib/store";
 
@@ -30,6 +31,7 @@ export default function ResistanceApp() {
         <TabsList>
           <TabsTrigger value="evolution">evolution</TabsTrigger>
           <TabsTrigger value="diagnosis">diagnosis</TabsTrigger>
+          <TabsTrigger value="explain">explain</TabsTrigger>
         </TabsList>
       </div>
       <TabsContent value="evolution">
@@ -37,6 +39,9 @@ export default function ResistanceApp() {
       </TabsContent>
       <TabsContent value="diagnosis">
         <DiagnosisView />
+      </TabsContent>
+      <TabsContent value="explain">
+        <ExplainerPanel />
       </TabsContent>
     </Tabs>
   );
