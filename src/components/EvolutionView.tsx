@@ -12,6 +12,9 @@ import { resistantFraction, totalPopulation } from "@/lib/engine";
 const TimeSeriesChart = dynamic(() => import("@/components/TimeSeriesChart"), {
   ssr: false,
 });
+const DistributionChart = dynamic(() => import("@/components/DistributionChart"), {
+  ssr: false,
+});
 import { useSimStore } from "@/lib/store";
 import type { SimParams } from "@/lib/types";
 
@@ -207,6 +210,15 @@ export default function EvolutionView() {
             </CardHeader>
             <CardContent>
               <TimeSeriesChart />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>resistance distribution</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DistributionChart />
             </CardContent>
           </Card>
         </div>
