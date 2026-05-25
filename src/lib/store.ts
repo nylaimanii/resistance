@@ -32,6 +32,7 @@ function initialState(): SimState {
     tick: 0,
     buckets: makeInitialBuckets(),
     drugConcentration: 0,
+    doseActive: false,
     running: false,
     params: { ...DEFAULT_PARAMS },
     history: [],
@@ -44,10 +45,15 @@ export const useSimStore = create<SimStore>((set) => ({
 
   step: () =>
     set((state) => {
-      // full tick: growth → mutation → selection → decay
+      // full tick: growth → mutation → (re-apply if doseActive) → selection → decay
       const a = stepGrowth(state);
       const b = stepMutation(a);
-      const c = stepSelection(b);
+      // sustained course: top concentration back up to params.doseStrength before selection,
+      // so even the resistant stragglers keep facing the full dose
+      const beforeSel = state.doseActive
+        ? { ...b, drugConcentration: state.params.doseStrength }
+        : b;
+      const c = stepSelection(beforeSel);
       const next = stepDecay(c);
 
       const nextTick = state.tick + 1;
@@ -83,10 +89,12 @@ export const useSimStore = create<SimStore>((set) => ({
       const history = [...state.history, snapshot].slice(-HISTORY_CAP);
       const events = newEvents.length > 0 ? [...state.events, ...newEvents] : state.events;
 
-      // auto-pause when cleared so the loop doesn't spin on a dead population
-      const running = newPop === 0 ? false : state.running;
+      // auto-pause + auto-end course when cleared so the loop doesn't spin on a dead population
+      const cleared = newPop === 0;
+      const running = cleared ? false : state.running;
+      const doseActive = cleared ? false : state.doseActive;
 
-      return { ...next, tick: nextTick, history, events, running };
+      return { ...next, tick: nextTick, history, events, running, doseActive };
     }),
 
   start: () => set({ running: true }),
@@ -95,6 +103,7 @@ export const useSimStore = create<SimStore>((set) => ({
   deployDrug: (strength: number) =>
     set((state) => ({
       drugConcentration: strength,
+      doseActive: true,
       events: [
         ...state.events,
         {
@@ -105,9 +114,10 @@ export const useSimStore = create<SimStore>((set) => ({
       ],
     })),
 
+  // ends the course — decay then takes over naturally, surviving cells get a chance to regrow
   stopDose: () =>
     set((state) => ({
-      drugConcentration: 0,
+      doseActive: false,
       events: [
         ...state.events,
         { tick: state.tick, kind: "dose_stopped", note: "dose stopped" },

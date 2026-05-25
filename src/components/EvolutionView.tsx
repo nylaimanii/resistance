@@ -105,7 +105,7 @@ function Readout({ label, value }: { label: string; value: string }) {
 function ActionRow() {
   const running = useSimStore((s) => s.running);
   const doseStrength = useSimStore((s) => s.params.doseStrength);
-  const drugConcentration = useSimStore((s) => s.drugConcentration);
+  const doseActive = useSimStore((s) => s.doseActive);
   const start = useSimStore((s) => s.start);
   const pause = useSimStore((s) => s.pause);
   const deployDrug = useSimStore((s) => s.deployDrug);
@@ -120,15 +120,11 @@ function ActionRow() {
       <Button
         variant="secondary"
         onClick={() => deployDrug(doseStrength)}
-        disabled={doseStrength === 0}
+        disabled={doseStrength === 0 || doseActive}
       >
-        deploy antibiotic
+        {doseActive ? "dosing..." : "deploy antibiotic"}
       </Button>
-      <Button
-        variant="outline"
-        onClick={stopDose}
-        disabled={drugConcentration === 0}
-      >
+      <Button variant="outline" onClick={stopDose} disabled={!doseActive}>
         stop dose
       </Button>
       <Button variant="ghost" onClick={reset}>
@@ -155,9 +151,11 @@ export default function EvolutionView() {
   const tick = useSimStore((s) => s.tick);
   const buckets = useSimStore((s) => s.buckets);
   const drugConcentration = useSimStore((s) => s.drugConcentration);
+  const doseActive = useSimStore((s) => s.doseActive);
 
   const pop = totalPopulation(buckets);
   const frac = resistantFraction(buckets);
+  const cleared = tick > 0 && pop === 0;
 
   return (
     <main className="min-h-screen w-full px-6 py-8 lg:px-10">
@@ -186,7 +184,19 @@ export default function EvolutionView() {
         <div className="flex flex-col gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>state</CardTitle>
+              <CardTitle className="flex items-center gap-3">
+                <span>state</span>
+                {cleared && (
+                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    population cleared ✓
+                  </span>
+                )}
+                {doseActive && !cleared && (
+                  <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive">
+                    dosing
+                  </span>
+                )}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">

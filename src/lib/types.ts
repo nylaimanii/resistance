@@ -27,6 +27,8 @@ export type SimState = {
   tick: number;
   buckets: ResistanceBucket[];
   drugConcentration: number;
+  // doseActive = "still taking the antibiotic" — re-applies the dose each tick until stopDose
+  doseActive: boolean;
   running: boolean;
   params: SimParams;
   history: SimSnapshot[];
