@@ -1,11 +1,17 @@
 "use client";
 
 import { useEffect } from "react";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { resistantFraction, totalPopulation } from "@/lib/engine";
+
+// recharts ResponsiveContainer needs the real DOM to measure; skip SSR
+const TimeSeriesChart = dynamic(() => import("@/components/TimeSeriesChart"), {
+  ssr: false,
+});
 import { useSimStore } from "@/lib/store";
 import type { SimParams } from "@/lib/types";
 
@@ -197,12 +203,10 @@ export default function EvolutionView() {
 
           <Card>
             <CardHeader>
-              <CardTitle>charts</CardTitle>
+              <CardTitle>population + resistance over time</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex h-56 items-center justify-center rounded-md border border-dashed border-muted-foreground/30 text-sm text-muted-foreground">
-                charts coming in step 9
-              </div>
+              <TimeSeriesChart />
             </CardContent>
           </Card>
         </div>
