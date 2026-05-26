@@ -1,6 +1,11 @@
 import { create } from "zustand";
 import type { SimEvent, SimParams, SimSnapshot, SimState } from "./types";
-import { DEFAULT_PARAMS, makeInitialBuckets } from "./defaults";
+import {
+  DEFAULT_PARAMS,
+  INITIAL_CONNECTIONS,
+  makeInitialBuckets,
+  makeInitialRegions,
+} from "./defaults";
 import {
   RESISTANT_THRESHOLD,
   resistantFraction,
@@ -10,6 +15,7 @@ import {
   stepSelection,
   totalPopulation,
 } from "./engine";
+import { stepSurveillanceOnce } from "./surveillance";
 
 const HISTORY_CAP = 300;
 const DEFAULT_TICK_INTERVAL_MS = 150;
@@ -27,9 +33,28 @@ type SimActions = {
   setTickInterval: (ms: number) => void;
   setDiagnosisLag: (n: number) => void;
   reset: () => void;
+
+  // surveillance — independent of the single-population evolution sim
+  startSurveillance: () => void;
+  pauseSurveillance: () => void;
+  resetSurveillance: () => void;
+  stepSurveillance: () => void;
+  deployDrugToRegion: (regionId: string, strength: number) => void;
+  stopDoseInRegion: (regionId: string) => void;
+  selectRegion: (regionId: string | null) => void;
 };
 
 export type SimStore = SimState & SimActions;
+
+function initialSurveillance() {
+  return {
+    regions: makeInitialRegions(),
+    connections: [...INITIAL_CONNECTIONS],
+    surveillanceTick: 0,
+    surveillanceRunning: false,
+    selectedRegionId: null as string | null,
+  };
+}
 
 function initialState(): SimState {
   return {
@@ -43,6 +68,7 @@ function initialState(): SimState {
     params: { ...DEFAULT_PARAMS },
     history: [],
     events: [],
+    ...initialSurveillance(),
   };
 }
 
@@ -146,4 +172,40 @@ export const useSimStore = create<SimStore>((set) => ({
       tickIntervalMs: state.tickIntervalMs,
       diagnosisLagTicks: state.diagnosisLagTicks,
     })),
+
+  // --- surveillance (independent parallel sim across regions) ---
+
+  startSurveillance: () => set({ surveillanceRunning: true }),
+  pauseSurveillance: () => set({ surveillanceRunning: false }),
+
+  resetSurveillance: () => set(initialSurveillance()),
+
+  // advance every region one engine tick, then mix across connections
+  stepSurveillance: () =>
+    set((state) => ({
+      regions: stepSurveillanceOnce(
+        state.regions,
+        state.connections,
+        state.params
+      ),
+      surveillanceTick: state.surveillanceTick + 1,
+    })),
+
+  deployDrugToRegion: (regionId: string, strength: number) =>
+    set((state) => ({
+      regions: state.regions.map((r) =>
+        r.id === regionId
+          ? { ...r, drugConcentration: strength, doseActive: true }
+          : r
+      ),
+    })),
+
+  stopDoseInRegion: (regionId: string) =>
+    set((state) => ({
+      regions: state.regions.map((r) =>
+        r.id === regionId ? { ...r, doseActive: false } : r
+      ),
+    })),
+
+  selectRegion: (regionId: string | null) => set({ selectedRegionId: regionId }),
 }));

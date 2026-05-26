@@ -23,6 +23,26 @@ export type SimSnapshot = {
   drugConcentration: number;
 };
 
+// surveillance view: a small grid of connected regions, each running its
+// own copy of the engine. shares the global SimParams; transfer between
+// regions seeds resistance across the map.
+export type Region = {
+  id: string;
+  name: string;
+  // normalized 0..1 coords for the SVG map layout
+  x: number;
+  y: number;
+  buckets: ResistanceBucket[];
+  drugConcentration: number;
+  doseActive: boolean;
+};
+
+export type Connection = {
+  a: string; // region id
+  b: string; // region id
+  weight: number; // 0..1 — scales the per-tick transfer rate
+};
+
 export type SimState = {
   tick: number;
   buckets: ResistanceBucket[];
@@ -37,4 +57,10 @@ export type SimState = {
   params: SimParams;
   history: SimSnapshot[];
   events: SimEvent[];
+  // surveillance — separate parallel sim across multiple regions
+  regions: Region[];
+  connections: Connection[];
+  surveillanceTick: number;
+  surveillanceRunning: boolean;
+  selectedRegionId: string | null;
 };

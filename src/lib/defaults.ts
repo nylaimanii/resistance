@@ -1,4 +1,4 @@
-import type { ResistanceBucket, SimParams } from "./types";
+import type { Connection, Region, ResistanceBucket, SimParams } from "./types";
 
 export const DEFAULT_PARAMS: SimParams = {
   mutationRate: 0.01,
@@ -24,3 +24,31 @@ export function makeInitialBuckets(): ResistanceBucket[] {
     count: Math.round((w / weightSum) * INITIAL_POPULATION),
   }));
 }
+
+// hand-placed positions in normalized 0..1 space — Gamma is the central hub,
+// the other four hang off it with two lateral cross-connections.
+const REGION_SEEDS: Array<{ id: string; name: string; x: number; y: number }> = [
+  { id: "alpha", name: "Alpha", x: 0.2, y: 0.25 },
+  { id: "beta", name: "Beta", x: 0.8, y: 0.25 },
+  { id: "gamma", name: "Gamma", x: 0.5, y: 0.5 },
+  { id: "delta", name: "Delta", x: 0.22, y: 0.78 },
+  { id: "epsilon", name: "Epsilon", x: 0.78, y: 0.78 },
+];
+
+export function makeInitialRegions(): Region[] {
+  return REGION_SEEDS.map((seed) => ({
+    ...seed,
+    buckets: makeInitialBuckets(),
+    drugConcentration: 0,
+    doseActive: false,
+  }));
+}
+
+export const INITIAL_CONNECTIONS: Connection[] = [
+  { a: "alpha", b: "gamma", weight: 0.6 },
+  { a: "beta", b: "gamma", weight: 0.5 },
+  { a: "delta", b: "gamma", weight: 0.4 },
+  { a: "epsilon", b: "gamma", weight: 0.5 },
+  { a: "alpha", b: "delta", weight: 0.3 },
+  { a: "beta", b: "epsilon", weight: 0.3 },
+];
