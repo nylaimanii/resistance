@@ -92,18 +92,46 @@ function buildReportPayload(images: {
   };
 }
 
+function svgHasRealSize(selector: string): boolean {
+  if (typeof document === "undefined") return false;
+  const container = document.querySelector(selector);
+  const svg = container?.querySelector("svg") as SVGSVGElement | null;
+  if (!svg) return false;
+  const rect = svg.getBoundingClientRect();
+  if (rect.width > 0 && rect.height > 0) return true;
+  // fall back to width/height attributes (rAF before paint can show rect=0×0
+  // even when attrs are correct — fixed-size LineChart sets these)
+  const w = Number(svg.getAttribute("width"));
+  const h = Number(svg.getAttribute("height"));
+  return Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0;
+}
+
 async function captureCharts(): Promise<{
   timeSeries: string | null;
   distribution: string | null;
 }> {
   // small delay so recharts can settle after any in-flight tick update
   await new Promise((r) => setTimeout(r, 50));
-  const timeSeries = await captureExportChart(
+
+  // one-time retry per chart if the svg still reports zero size
+  async function captureOne(
+    selector: string,
+    w: number,
+    h: number
+  ): Promise<string | null> {
+    if (!svgHasRealSize(selector)) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (!svgHasRealSize(selector)) return null;
+    }
+    return captureExportChart(selector, w, h);
+  }
+
+  const timeSeries = await captureOne(
     "[data-export-chart='time-series']",
     1200,
     600
   );
-  const distribution = await captureExportChart(
+  const distribution = await captureOne(
     "[data-export-chart='distribution']",
     1200,
     533
@@ -233,23 +261,22 @@ export default function ExportPanel() {
       </div>
 
       {/* off-screen capture surface — kept mounted so the charts are always
-          ready to serialize on click. real dimensions so ResponsiveContainer
-          renders an actual SVG. */}
+          ready to serialize on click. fixed-size export variants (no
+          ResponsiveContainer) so the SVG has real width/height attrs even
+          when mounted off-screen. */}
       <div
         aria-hidden
         className="pointer-events-none absolute left-[-10000px] top-0"
       >
-        <div
-          data-export-chart="time-series"
-          style={{ width: CAPTURE_TS_W, height: CAPTURE_TS_H }}
-        >
-          <TimeSeriesChart />
+        <div data-export-chart="time-series">
+          <TimeSeriesChart
+            exportSize={{ width: CAPTURE_TS_W, height: CAPTURE_TS_H }}
+          />
         </div>
-        <div
-          data-export-chart="distribution"
-          style={{ width: CAPTURE_DIST_W, height: CAPTURE_DIST_H }}
-        >
-          <DistributionChart />
+        <div data-export-chart="distribution">
+          <DistributionChart
+            exportSize={{ width: CAPTURE_DIST_W, height: CAPTURE_DIST_H }}
+          />
         </div>
       </div>
     </main>
