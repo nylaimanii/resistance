@@ -13,7 +13,9 @@ import {
 } from "recharts";
 import { useSimStore } from "@/lib/store";
 
-const SAFE_COLOR = "var(--color-foreground)";
+// emerald → destructive: same safe→danger palette as SurveillanceView nodes
+// and the economics resistance bar, so resistance reads as one visual system.
+const SAFE_COLOR = "oklch(0.696 0.17 162.48)"; // emerald-500
 const DANGER_COLOR = "var(--color-destructive)";
 
 // blend safe → danger by resistance level (0..1) so bars to the right read as more dangerous

@@ -46,16 +46,30 @@ export default function ResistanceApp() {
 
   return (
     <Tabs defaultValue="evolution" className="min-h-screen">
-      <div className="border-b px-6 py-3 lg:px-10">
-        <TabsList>
-          <TabsTrigger value="evolution">evolution</TabsTrigger>
-          <TabsTrigger value="diagnosis">diagnosis</TabsTrigger>
-          <TabsTrigger value="surveillance">surveillance</TabsTrigger>
-          <TabsTrigger value="economics">economics</TabsTrigger>
-          <TabsTrigger value="explain">explain</TabsTrigger>
-          <TabsTrigger value="export">export</TabsTrigger>
-        </TabsList>
-      </div>
+      <header className="border-b">
+        <div className="flex flex-col gap-3 px-6 pt-5 pb-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6 lg:px-10">
+          <div className="space-y-0.5">
+            <h1 className="text-lg font-semibold tracking-tight sm:text-xl">
+              RESISTANCE
+            </h1>
+            <p className="text-xs text-muted-foreground sm:text-sm">
+              one engine, six views — watch resistance evolve and the
+              incentives that let it.
+            </p>
+          </div>
+          {/* horizontal scroll so 6 tabs don't overflow on narrow screens */}
+          <div className="-mx-2 overflow-x-auto px-2">
+            <TabsList>
+              <TabsTrigger value="evolution">evolution</TabsTrigger>
+              <TabsTrigger value="diagnosis">diagnosis</TabsTrigger>
+              <TabsTrigger value="surveillance">surveillance</TabsTrigger>
+              <TabsTrigger value="economics">economics</TabsTrigger>
+              <TabsTrigger value="explain">explain</TabsTrigger>
+              <TabsTrigger value="export">export</TabsTrigger>
+            </TabsList>
+          </div>
+        </div>
+      </header>
       <TabsContent value="evolution">
         <EvolutionView />
       </TabsContent>
