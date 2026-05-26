@@ -63,4 +63,6 @@ export type SimState = {
   surveillanceTick: number;
   surveillanceRunning: boolean;
   selectedRegionId: string | null;
+  // economics — turn-based pharma meta-game, independent of the engine
+  economics: import("./economics").EconomicsState;
 };

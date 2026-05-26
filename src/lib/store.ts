@@ -16,6 +16,13 @@ import {
   totalPopulation,
 } from "./engine";
 import { stepSurveillanceOnce } from "./surveillance";
+import {
+  advanceEconomicsTurn,
+  initialEconomicsState,
+  setPolicy,
+  startNewAntibiotic,
+  type Policies,
+} from "./economics";
 
 const HISTORY_CAP = 300;
 const DEFAULT_TICK_INTERVAL_MS = 150;
@@ -42,6 +49,12 @@ type SimActions = {
   deployDrugToRegion: (regionId: string, strength: number) => void;
   stopDoseInRegion: (regionId: string) => void;
   selectRegion: (regionId: string | null) => void;
+
+  // economics — turn-based, independent of evolution + surveillance
+  investInAntibiotic: () => void;
+  advanceYear: () => void;
+  togglePolicy: (key: keyof Policies) => void;
+  resetEconomics: () => void;
 };
 
 export type SimStore = SimState & SimActions;
@@ -69,6 +82,7 @@ function initialState(): SimState {
     history: [],
     events: [],
     ...initialSurveillance(),
+    economics: initialEconomicsState(),
   };
 }
 
@@ -208,4 +222,19 @@ export const useSimStore = create<SimStore>((set) => ({
     })),
 
   selectRegion: (regionId: string | null) => set({ selectedRegionId: regionId }),
+
+  // --- economics (turn-based pharma meta-game) ---
+
+  investInAntibiotic: () =>
+    set((state) => ({ economics: startNewAntibiotic(state.economics) })),
+
+  advanceYear: () =>
+    set((state) => ({ economics: advanceEconomicsTurn(state.economics) })),
+
+  togglePolicy: (key) =>
+    set((state) => ({
+      economics: setPolicy(state.economics, key, !state.economics.policies[key]),
+    })),
+
+  resetEconomics: () => set({ economics: initialEconomicsState() }),
 }));

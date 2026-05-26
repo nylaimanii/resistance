@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import DiagnosisView from "@/components/DiagnosisView";
+import EconomicsView from "@/components/EconomicsView";
 import EvolutionView from "@/components/EvolutionView";
 import ExplainerPanel from "@/components/ExplainerPanel";
 import ExportPanel from "@/components/ExportPanel";
@@ -50,6 +51,7 @@ export default function ResistanceApp() {
           <TabsTrigger value="evolution">evolution</TabsTrigger>
           <TabsTrigger value="diagnosis">diagnosis</TabsTrigger>
           <TabsTrigger value="surveillance">surveillance</TabsTrigger>
+          <TabsTrigger value="economics">economics</TabsTrigger>
           <TabsTrigger value="explain">explain</TabsTrigger>
           <TabsTrigger value="export">export</TabsTrigger>
         </TabsList>
@@ -62,6 +64,9 @@ export default function ResistanceApp() {
       </TabsContent>
       <TabsContent value="surveillance">
         <SurveillanceView />
+      </TabsContent>
+      <TabsContent value="economics">
+        <EconomicsView />
       </TabsContent>
       <TabsContent value="explain">
         <ExplainerPanel />

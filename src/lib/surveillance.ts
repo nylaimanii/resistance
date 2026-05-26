@@ -10,6 +10,7 @@ import type {
   SimState,
 } from "./types";
 import { stepDecay, stepGrowth, stepMutation, stepSelection } from "./engine";
+import { initialEconomicsState } from "./economics";
 
 // gentle per-tick travel — small enough that spread is gradual and watchable
 export const BASE_TRANSFER_RATE = 0.01;
@@ -34,6 +35,7 @@ function asSimState(region: Region, params: SimParams): SimState {
     surveillanceTick: 0,
     surveillanceRunning: false,
     selectedRegionId: null,
+    economics: initialEconomicsState(),
   };
 }
 
