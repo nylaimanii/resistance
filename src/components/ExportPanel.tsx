@@ -1,31 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+// IMPORTANT: static imports (not next/dynamic) so the offscreen export
+// charts are guaranteed to be mounted and painted by the time the user
+// clicks "export run report". Dynamic imports introduced a race where a
+// fast click could land before the chart had finished its first render
+// → empty svg → blank png.
+import TimeSeriesChart from "@/components/TimeSeriesChart";
+import DistributionChart from "@/components/DistributionChart";
 import { resistantFraction, totalPopulation } from "@/lib/engine";
 import { useSimStore } from "@/lib/store";
 import { captureExportChart } from "@/lib/svg-to-png";
 
-// recharts charts need the DOM to measure; skip SSR
-const TimeSeriesChart = dynamic(() => import("@/components/TimeSeriesChart"), {
-  ssr: false,
-});
-const DistributionChart = dynamic(
-  () => import("@/components/DistributionChart"),
-  { ssr: false }
-);
-
 const MAX_HISTORY_POINTS = 18;
 
-// off-screen capture container — recharts ResponsiveContainer needs real
-// dimensions, so we give it explicit pixel size out at -10000px so it never
-// affects layout or pointer events.
-const CAPTURE_TS_W = 720;
-const CAPTURE_TS_H = 360;
-const CAPTURE_DIST_W = 720;
-const CAPTURE_DIST_H = 320;
+// off-screen capture dimensions. Matching render size (exportSize) to
+// output canvas size (captureExportChart args) keeps everything 1:1 — no
+// hidden scaling that could lose detail.
+const CAPTURE_TS_W = 1200;
+const CAPTURE_TS_H = 600;
+const CAPTURE_DIST_W = 1200;
+const CAPTURE_DIST_H = 533;
 
 function buildReportPayload(images: {
   timeSeries: string | null;
@@ -92,19 +89,34 @@ function buildReportPayload(images: {
   };
 }
 
-function svgHasRealSize(selector: string): boolean {
-  if (typeof document === "undefined") return false;
+// Probe the chart container for the LARGEST svg (matches pickMainSvg in
+// svg-to-png) — using `container.querySelector("svg")` would return the
+// first svg, which for a chart with a Legend is a tiny 14×14 swatch icon
+// and would falsely pass any size check.
+function pickedSvgArea(selector: string): number {
+  if (typeof document === "undefined") return 0;
   const container = document.querySelector(selector);
-  const svg = container?.querySelector("svg") as SVGSVGElement | null;
-  if (!svg) return false;
-  const rect = svg.getBoundingClientRect();
-  if (rect.width > 0 && rect.height > 0) return true;
-  // fall back to width/height attributes (rAF before paint can show rect=0×0
-  // even when attrs are correct — fixed-size LineChart sets these)
-  const w = Number(svg.getAttribute("width"));
-  const h = Number(svg.getAttribute("height"));
-  return Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0;
+  if (!container) return 0;
+  const svgs = Array.from(container.querySelectorAll("svg")) as SVGSVGElement[];
+  let best = 0;
+  for (const s of svgs) {
+    const r = s.getBoundingClientRect();
+    let w = r.width;
+    let h = r.height;
+    if (!w || !h) {
+      w = Number(s.getAttribute("width")) || 0;
+      h = Number(s.getAttribute("height")) || 0;
+    }
+    const a = w * h;
+    if (a > best) best = a;
+  }
+  return best;
 }
+
+// Threshold guard: anything smaller than ~100×100 pixels is almost certainly
+// a legend icon or an unrendered/collapsed chart container. Better to skip
+// it and fall back to the text-only report than embed a blank image.
+const MIN_CAPTURE_AREA = 100 * 100;
 
 async function captureCharts(): Promise<{
   timeSeries: string | null;
@@ -113,28 +125,30 @@ async function captureCharts(): Promise<{
   // small delay so recharts can settle after any in-flight tick update
   await new Promise((r) => setTimeout(r, 50));
 
-  // one-time retry per chart if the svg still reports zero size
+  // retry up to twice if the main chart svg is still too small to be real
   async function captureOne(
     selector: string,
     w: number,
     h: number
   ): Promise<string | null> {
-    if (!svgHasRealSize(selector)) {
-      await new Promise((r) => setTimeout(r, 100));
-      if (!svgHasRealSize(selector)) return null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (pickedSvgArea(selector) >= MIN_CAPTURE_AREA) {
+        return captureExportChart(selector, w, h);
+      }
+      await new Promise((r) => setTimeout(r, 120));
     }
-    return captureExportChart(selector, w, h);
+    return null;
   }
 
   const timeSeries = await captureOne(
     "[data-export-chart='time-series']",
-    1200,
-    600
+    CAPTURE_TS_W,
+    CAPTURE_TS_H
   );
   const distribution = await captureOne(
     "[data-export-chart='distribution']",
-    1200,
-    533
+    CAPTURE_DIST_W,
+    CAPTURE_DIST_H
   );
   return { timeSeries, distribution };
 }
@@ -261,19 +275,34 @@ export default function ExportPanel() {
       </div>
 
       {/* off-screen capture surface — kept mounted so the charts are always
-          ready to serialize on click. fixed-size export variants (no
-          ResponsiveContainer) so the SVG has real width/height attrs even
-          when mounted off-screen. */}
+          ready to serialize on click. Every wrapper has an EXPLICIT pixel
+          size so nothing can collapse to 0×0 inside a flex/grid descendant.
+          position:absolute removes it from layout flow; left:-10000px keeps
+          it off-screen without using display:none (which would prevent
+          recharts from measuring/painting). */}
       <div
         aria-hidden
-        className="pointer-events-none absolute left-[-10000px] top-0"
+        className="pointer-events-none"
+        style={{
+          position: "absolute",
+          left: -10000,
+          top: 0,
+          width: CAPTURE_TS_W,
+          height: CAPTURE_TS_H + CAPTURE_DIST_H + 40,
+        }}
       >
-        <div data-export-chart="time-series">
+        <div
+          data-export-chart="time-series"
+          style={{ width: CAPTURE_TS_W, height: CAPTURE_TS_H }}
+        >
           <TimeSeriesChart
             exportSize={{ width: CAPTURE_TS_W, height: CAPTURE_TS_H }}
           />
         </div>
-        <div data-export-chart="distribution">
+        <div
+          data-export-chart="distribution"
+          style={{ width: CAPTURE_DIST_W, height: CAPTURE_DIST_H }}
+        >
           <DistributionChart
             exportSize={{ width: CAPTURE_DIST_W, height: CAPTURE_DIST_H }}
           />

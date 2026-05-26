@@ -159,6 +159,10 @@ export async function svgToPng(
   }
 }
 
+// area floor for a "real" chart svg — anything smaller is almost certainly a
+// legend icon (14×14) or a chart that hasn't finished laying out yet
+const CAPTURE_MIN_AREA = 100 * 100;
+
 export async function captureExportChart(
   selector: string,
   outWidth: number,
@@ -169,5 +173,11 @@ export async function captureExportChart(
   if (!container) return null;
   const svg = pickMainSvg(container);
   if (!svg) return null;
+  // final safety net: if the picked main svg is suspiciously small, don't
+  // embed a blank image — return null so the caller falls back to text.
+  const r = svg.getBoundingClientRect();
+  const w = r.width || Number(svg.getAttribute("width")) || 0;
+  const h = r.height || Number(svg.getAttribute("height")) || 0;
+  if (w * h < CAPTURE_MIN_AREA) return null;
   return svgToPng(svg, outWidth, outHeight);
 }
