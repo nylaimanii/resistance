@@ -117,24 +117,27 @@ async function captureCharts(): Promise<{
   async function captureOne(
     selector: string,
     w: number,
-    h: number
+    h: number,
+    debugName: string
   ): Promise<string | null> {
     if (!svgHasRealSize(selector)) {
       await new Promise((r) => setTimeout(r, 100));
       if (!svgHasRealSize(selector)) return null;
     }
-    return captureExportChart(selector, w, h);
+    return captureExportChart(selector, w, h, debugName);
   }
 
   const timeSeries = await captureOne(
     "[data-export-chart='time-series']",
     1200,
-    600
+    600,
+    "time-series"
   );
   const distribution = await captureOne(
     "[data-export-chart='distribution']",
     1200,
-    533
+    533,
+    "distribution"
   );
   return { timeSeries, distribution };
 }
