@@ -151,9 +151,9 @@ function buildContent(p: ReportPayload): Built {
 
   addHeading("resistance over time", "HEADING_2");
   addImageSlot("timeSeries");
-  addLine("(text sample below if no chart image)");
+  addLine("data table (tick-by-tick values):");
   if ((p.history ?? []).length === 0) {
-    addLine("(no history captured)");
+    addLine("no history captured.");
   } else {
     for (const h of p.history ?? []) {
       addLine(
@@ -168,7 +168,7 @@ function buildContent(p: ReportPayload): Built {
   addHeading("final resistance distribution", "HEADING_2");
   addImageSlot("distribution");
   addLine(
-    "(histogram of resistance levels at end of run — image embedded above if available)"
+    "histogram of resistance levels at the end of the run, low (susceptible) on the left to high (resistant) on the right."
   );
 
   return { text, styles, imageSlots };

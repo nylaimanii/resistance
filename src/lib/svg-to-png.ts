@@ -108,6 +108,22 @@ export async function svgToPng(
     // resolve css vars + class-based styling into literal attributes on every node
     inlineStylesOnClone(svg, clone);
 
+    // ALWAYS paint a solid white rectangle behind everything. recharts'
+    // CartesianGrid background rect can end up with a dark/inherited fill in
+    // the isolated data-URL render context (no external CSS loads there),
+    // which made the bar chart's exported PNG look like a black page. This
+    // guarantees a white background under all chart marks regardless.
+    const bgRect = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "rect"
+    );
+    bgRect.setAttribute("x", "0");
+    bgRect.setAttribute("y", "0");
+    bgRect.setAttribute("width", "100%");
+    bgRect.setAttribute("height", "100%");
+    bgRect.setAttribute("fill", PNG_BG);
+    clone.insertBefore(bgRect, clone.firstChild);
+
     const xml = new XMLSerializer().serializeToString(clone);
     const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
