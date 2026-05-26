@@ -1,10 +1,13 @@
 // Server-only. Builds a real run report from the sim state the client sends
-// and writes it into a new google doc using the docs API. No chart images yet
-// (step 21) — text + events + downsampled history stand in for now.
+// and writes it into a new google doc using the docs API. Chart images are
+// uploaded to the user's Drive (drive.file scope) and embedded via
+// insertInlineImage. Each image step is independently try/catch'd so the
+// text report still ships if image embedding fails.
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { Readable } from "node:stream";
 import { google } from "googleapis";
-import type { docs_v1 } from "googleapis";
+import type { docs_v1, drive_v3 } from "googleapis";
 import { ACCESS_COOKIE } from "@/lib/google-oauth";
 
 export const runtime = "nodejs";
@@ -36,6 +39,11 @@ type ReportPayload = {
   };
   events?: ReportEvent[];
   history?: HistoryPoint[];
+  // base64 data URLs (or raw base64) for the two charts. either or both may be null.
+  images?: {
+    timeSeries?: string | null;
+    distribution?: string | null;
+  };
 };
 
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
@@ -61,12 +69,17 @@ function summarizeEvents(events: ReportEvent[]): string {
   return parts.join(", then ") + ".";
 }
 
+type ImageKind = "timeSeries" | "distribution";
+
 type Built = {
   text: string;
   styles: {
     range: { startIndex: number; endIndex: number };
     namedStyleType: "HEADING_1" | "HEADING_2";
   }[];
+  // pre-insert image slot indices in the doc (1-based). a separate batchUpdate
+  // inserts each image at its slot after the text + styles batch commits.
+  imageSlots: { kind: ImageKind; index: number }[];
 };
 
 function buildContent(p: ReportPayload): Built {
@@ -75,6 +88,7 @@ function buildContent(p: ReportPayload): Built {
 
   let text = "";
   const styles: Built["styles"] = [];
+  const imageSlots: Built["imageSlots"] = [];
 
   // doc indices are 1-based; my buffer offsets are 0-based, so docs index = offset + 1
   const addHeading = (s: string, namedStyleType: "HEADING_1" | "HEADING_2") => {
@@ -85,6 +99,13 @@ function buildContent(p: ReportPayload): Built {
   };
   const addLine = (s: string) => {
     text += s + "\n";
+  };
+  const addImageSlot = (kind: ImageKind) => {
+    // empty paragraph that will receive the inline image; if the image is
+    // skipped the paragraph just stays empty (no crash, no broken section)
+    const index = text.length + 1;
+    imageSlots.push({ kind, index });
+    text += "\n";
   };
 
   addHeading(title, "HEADING_1");
@@ -129,7 +150,8 @@ function buildContent(p: ReportPayload): Built {
   addLine("");
 
   addHeading("resistance over time", "HEADING_2");
-  addLine("(charts ship in step 21 — text sample below)");
+  addImageSlot("timeSeries");
+  addLine("(text sample below if no chart image)");
   if ((p.history ?? []).length === 0) {
     addLine("(no history captured)");
   } else {
@@ -141,8 +163,48 @@ function buildContent(p: ReportPayload): Built {
       );
     }
   }
+  addLine("");
 
-  return { text, styles };
+  addHeading("final resistance distribution", "HEADING_2");
+  addImageSlot("distribution");
+  addLine(
+    "(histogram of resistance levels at end of run — image embedded above if available)"
+  );
+
+  return { text, styles, imageSlots };
+}
+
+async function uploadImageToDrive(
+  drive: drive_v3.Drive,
+  base64DataUrl: string,
+  name: string
+): Promise<string | null> {
+  try {
+    const match = base64DataUrl.match(/^data:image\/png;base64,(.+)$/);
+    const raw = match ? match[1] : base64DataUrl;
+    const buffer = Buffer.from(raw, "base64");
+    if (buffer.length === 0) return null;
+
+    const upload = await drive.files.create({
+      requestBody: { name, mimeType: "image/png" },
+      media: { mimeType: "image/png", body: Readable.from(buffer) },
+      fields: "id",
+    });
+    const fileId = upload.data.id;
+    if (!fileId) return null;
+
+    // anyone-with-link reader so Docs' image-fetch can read it. drive.file
+    // scope only sees files the app created, which is this exact file.
+    await drive.permissions.create({
+      fileId,
+      requestBody: { role: "reader", type: "anyone" },
+    });
+
+    return `https://drive.google.com/uc?id=${fileId}`;
+  } catch (err) {
+    console.error("drive image upload failed:", err);
+    return null;
+  }
 }
 
 export async function POST(request: Request) {
@@ -166,6 +228,7 @@ export async function POST(request: Request) {
     const auth = new google.auth.OAuth2();
     auth.setCredentials({ access_token: accessToken });
     const docs = google.docs({ version: "v1", auth });
+    const drive = google.drive({ version: "v3", auth });
 
     const docTitle =
       payload.title ??
@@ -183,7 +246,10 @@ export async function POST(request: Request) {
     }
 
     const built = buildContent(payload);
-    const requests: docs_v1.Schema$Request[] = [
+
+    // batch #1: text + heading styles — this is what we always want to ship,
+    // even if image embedding later fails entirely.
+    const textRequests: docs_v1.Schema$Request[] = [
       { insertText: { location: { index: 1 }, text: built.text } },
       ...built.styles.map(
         (s): docs_v1.Schema$Request => ({
@@ -195,14 +261,61 @@ export async function POST(request: Request) {
         })
       ),
     ];
-
     await docs.documents.batchUpdate({
       documentId,
-      requestBody: { requests },
+      requestBody: { requests: textRequests },
     });
+
+    // batch #2+: embed each chart. insert in REVERSE index order so an earlier
+    // insertion doesn't shift the index we want for a later one. each image is
+    // independently try/catch'd — failure of one doesn't block the others or
+    // the overall response.
+    const imagesSkipped: string[] = [];
+    let imagesEmbedded = 0;
+    const slotsByIndexDesc = [...built.imageSlots].sort(
+      (a, b) => b.index - a.index
+    );
+    const incoming = payload.images ?? {};
+    for (const slot of slotsByIndexDesc) {
+      const base64 = incoming[slot.kind];
+      if (!base64) {
+        imagesSkipped.push(slot.kind);
+        continue;
+      }
+      try {
+        const url = await uploadImageToDrive(
+          drive,
+          base64,
+          `resistance-${slot.kind}-${Date.now()}.png`
+        );
+        if (!url) {
+          imagesSkipped.push(slot.kind);
+          continue;
+        }
+        await docs.documents.batchUpdate({
+          documentId,
+          requestBody: {
+            requests: [
+              {
+                insertInlineImage: {
+                  location: { index: slot.index },
+                  uri: url,
+                },
+              },
+            ],
+          },
+        });
+        imagesEmbedded += 1;
+      } catch (err) {
+        console.error(`failed to embed ${slot.kind} image:`, err);
+        imagesSkipped.push(slot.kind);
+      }
+    }
 
     return NextResponse.json({
       docUrl: `https://docs.google.com/document/d/${documentId}/edit`,
+      imagesEmbedded,
+      imagesSkipped,
     });
   } catch {
     // never leak the raw error / token to the client

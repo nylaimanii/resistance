@@ -1,14 +1,36 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { resistantFraction, totalPopulation } from "@/lib/engine";
 import { useSimStore } from "@/lib/store";
+import { captureExportChart } from "@/lib/svg-to-png";
+
+// recharts charts need the DOM to measure; skip SSR
+const TimeSeriesChart = dynamic(() => import("@/components/TimeSeriesChart"), {
+  ssr: false,
+});
+const DistributionChart = dynamic(
+  () => import("@/components/DistributionChart"),
+  { ssr: false }
+);
 
 const MAX_HISTORY_POINTS = 18;
 
-function buildReportPayload() {
+// off-screen capture container — recharts ResponsiveContainer needs real
+// dimensions, so we give it explicit pixel size out at -10000px so it never
+// affects layout or pointer events.
+const CAPTURE_TS_W = 720;
+const CAPTURE_TS_H = 360;
+const CAPTURE_DIST_W = 720;
+const CAPTURE_DIST_H = 320;
+
+function buildReportPayload(images: {
+  timeSeries: string | null;
+  distribution: string | null;
+}) {
   const state = useSimStore.getState();
   const population = totalPopulation(state.buckets);
   const resFrac = resistantFraction(state.buckets);
@@ -29,7 +51,6 @@ function buildReportPayload() {
     population: h.population,
     resistantFraction: h.resistantFraction,
   }));
-  // always include the very last point so the final state is on the chart
   if (
     hist.length > 0 &&
     (downsampled.length === 0 ||
@@ -67,29 +88,78 @@ function buildReportPayload() {
       note: e.note,
     })),
     history: downsampled,
+    images,
   };
+}
+
+async function captureCharts(): Promise<{
+  timeSeries: string | null;
+  distribution: string | null;
+}> {
+  // small delay so recharts can settle after any in-flight tick update
+  await new Promise((r) => setTimeout(r, 50));
+  const timeSeries = await captureExportChart(
+    "[data-export-chart='time-series']",
+    1200,
+    600
+  );
+  const distribution = await captureExportChart(
+    "[data-export-chart='distribution']",
+    1200,
+    533
+  );
+  return { timeSeries, distribution };
 }
 
 export default function ExportPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [docUrl, setDocUrl] = useState<string | null>(null);
+  const [noteLines, setNoteLines] = useState<string[]>([]);
 
   async function exportRunReport() {
     if (loading) return;
     setLoading(true);
     setError(null);
     setDocUrl(null);
+    setNoteLines([]);
     try {
-      const payload = buildReportPayload();
+      const images = await captureCharts();
+      const skipped: string[] = [];
+      if (!images.timeSeries) skipped.push("time-series");
+      if (!images.distribution) skipped.push("distribution");
+
+      const payload = buildReportPayload(images);
       const res = await fetch("/api/google/export", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = (await res.json()) as { docUrl?: string; error?: string };
-      if (data.docUrl) setDocUrl(data.docUrl);
-      else setError(data.error ?? `request failed (${res.status})`);
+      const data = (await res.json()) as {
+        docUrl?: string;
+        error?: string;
+        imagesEmbedded?: number;
+        imagesSkipped?: string[];
+      };
+      if (data.docUrl) {
+        setDocUrl(data.docUrl);
+        const lines: string[] = [];
+        if (skipped.length > 0) {
+          lines.push(
+            `client-side capture skipped: ${skipped.join(", ")} (text fallback used).`
+          );
+        }
+        if (data.imagesSkipped && data.imagesSkipped.length > 0) {
+          lines.push(
+            `server-side embed skipped: ${data.imagesSkipped.join(
+              ", "
+            )} (text fallback used).`
+          );
+        }
+        setNoteLines(lines);
+      } else {
+        setError(data.error ?? `request failed (${res.status})`);
+      }
     } catch {
       setError("network error — couldn't reach the export route.");
     } finally {
@@ -102,9 +172,9 @@ export default function ExportPanel() {
       <header className="mb-6 space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">export</h1>
         <p className="text-sm text-muted-foreground">
-          connect google, then export the current run as a formatted doc.
-          chart images come in step 21 — for now the report is text + events +
-          a downsampled history.
+          connect google, then export the current run as a formatted doc with
+          embedded charts. if chart capture or upload fails, the text report
+          still ships.
         </p>
       </header>
 
@@ -130,10 +200,9 @@ export default function ExportPanel() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              creates a new google doc in your drive with the current run&apos;s
-              parameters, a plain-language summary, the events log, and the
-              resistance trajectory. if you see &quot;not connected to google&quot;,
-              run step 1 first.
+              creates a new google doc with the current run&apos;s parameters,
+              event summary, embedded charts, and resistance trajectory. if you
+              see &quot;not connected to google&quot;, run step 1 first.
             </p>
             <Button onClick={exportRunReport} disabled={loading}>
               {loading ? "exporting..." : "export run report"}
@@ -152,8 +221,36 @@ export default function ExportPanel() {
                 </a>
               </p>
             )}
+            {noteLines.length > 0 && (
+              <ul className="space-y-1 text-xs text-muted-foreground">
+                {noteLines.map((l) => (
+                  <li key={l}>• {l}</li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
+      </div>
+
+      {/* off-screen capture surface — kept mounted so the charts are always
+          ready to serialize on click. real dimensions so ResponsiveContainer
+          renders an actual SVG. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-[-10000px] top-0"
+      >
+        <div
+          data-export-chart="time-series"
+          style={{ width: CAPTURE_TS_W, height: CAPTURE_TS_H }}
+        >
+          <TimeSeriesChart />
+        </div>
+        <div
+          data-export-chart="distribution"
+          style={{ width: CAPTURE_DIST_W, height: CAPTURE_DIST_H }}
+        >
+          <DistributionChart />
+        </div>
       </div>
     </main>
   );
