@@ -46,33 +46,37 @@ function inlineStylesOnClone(orig: SVGSVGElement, clone: SVGSVGElement) {
   }
 }
 
-function sampleCanvasHasContent(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number
-): { hasContent: boolean; nonWhite: number; sampled: number } {
-  // sample a 12x8 grid of pixels to check if anything non-white was drawn
-  const xs = 12;
-  const ys = 8;
-  let nonWhite = 0;
-  let sampled = 0;
-  for (let i = 1; i <= xs; i++) {
-    for (let j = 1; j <= ys; j++) {
-      const x = Math.floor((w * i) / (xs + 1));
-      const y = Math.floor((h * j) / (ys + 1));
-      const d = ctx.getImageData(x, y, 1, 1).data;
-      sampled++;
-      if (d[0] < 250 || d[1] < 250 || d[2] < 250) nonWhite++;
+// Pick the main chart surface. Recharts renders many svgs inside one chart
+// (each legend swatch is its own <svg>), and the first one in DOM order can
+// be a tiny 14×14 legend icon. The main surface is always the biggest svg,
+// so picking by largest rendered area is chart-agnostic and bulletproof.
+function pickMainSvg(container: Element): SVGSVGElement | null {
+  const svgs = Array.from(container.querySelectorAll("svg")) as SVGSVGElement[];
+  if (svgs.length === 0) return null;
+  let best: SVGSVGElement | null = null;
+  let bestArea = 0;
+  for (const s of svgs) {
+    const rect = s.getBoundingClientRect();
+    let w = rect.width;
+    let h = rect.height;
+    // fall back to attributes if bounding rect is 0 (off-screen / not painted yet)
+    if (!w || !h) {
+      w = Number(s.getAttribute("width")) || 0;
+      h = Number(s.getAttribute("height")) || 0;
+    }
+    const area = w * h;
+    if (area > bestArea) {
+      bestArea = area;
+      best = s;
     }
   }
-  return { hasContent: nonWhite > 0, nonWhite, sampled };
+  return best;
 }
 
 export async function svgToPng(
   svg: SVGSVGElement,
   outWidth: number,
-  outHeight: number,
-  debugName?: string
+  outHeight: number
 ): Promise<string | null> {
   try {
     // clone so we don't mutate the live chart's appearance / inline styles
@@ -88,9 +92,13 @@ export async function svgToPng(
     // explicit width/height + viewBox so the SVG renders at the right size
     // even without external CSS context
     const liveW =
-      svg.getAttribute("width") || String(svg.getBoundingClientRect().width) || String(outWidth);
+      svg.getAttribute("width") ||
+      String(svg.getBoundingClientRect().width) ||
+      String(outWidth);
     const liveH =
-      svg.getAttribute("height") || String(svg.getBoundingClientRect().height) || String(outHeight);
+      svg.getAttribute("height") ||
+      String(svg.getBoundingClientRect().height) ||
+      String(outHeight);
     clone.setAttribute("width", String(liveW));
     clone.setAttribute("height", String(liveH));
     if (!clone.getAttribute("viewBox")) {
@@ -101,16 +109,6 @@ export async function svgToPng(
     inlineStylesOnClone(svg, clone);
 
     const xml = new XMLSerializer().serializeToString(clone);
-    if (debugName) {
-      // TEMP debug — remove after capture is fixed
-      console.log(
-        `[capture ${debugName}] svg length: ${xml.length}, first 300: ${xml.slice(
-          0,
-          300
-        )}`
-      );
-    }
-
     const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
 
@@ -139,19 +137,8 @@ export async function svgToPng(
 
     URL.revokeObjectURL(url);
 
-    if (debugName) {
-      // TEMP debug — remove after capture is fixed
-      const probe = sampleCanvasHasContent(ctx, outWidth, outHeight);
-      console.log(
-        `[capture ${debugName}] canvas has content: ${probe.hasContent} (${probe.nonWhite}/${probe.sampled} non-white pixels)`
-      );
-    }
-
     return canvas.toDataURL("image/png");
-  } catch (err) {
-    if (debugName) {
-      console.log(`[capture ${debugName}] failed:`, err);
-    }
+  } catch {
     return null;
   }
 }
@@ -159,19 +146,12 @@ export async function svgToPng(
 export async function captureExportChart(
   selector: string,
   outWidth: number,
-  outHeight: number,
-  debugName?: string
+  outHeight: number
 ): Promise<string | null> {
   if (typeof document === "undefined") return null;
   const container = document.querySelector(selector);
-  if (!container) {
-    if (debugName) console.log(`[capture ${debugName}] container not found: ${selector}`);
-    return null;
-  }
-  const svg = container.querySelector("svg") as SVGSVGElement | null;
-  if (!svg) {
-    if (debugName) console.log(`[capture ${debugName}] no <svg> in container`);
-    return null;
-  }
-  return svgToPng(svg, outWidth, outHeight, debugName);
+  if (!container) return null;
+  const svg = pickMainSvg(container);
+  if (!svg) return null;
+  return svgToPng(svg, outWidth, outHeight);
 }
