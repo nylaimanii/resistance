@@ -74,7 +74,7 @@ export default function Landing() {
               same dose. opposite outcome.
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] lg:items-center">
+          <CardContent className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,360px)] md:items-center">
             <p className="text-sm leading-relaxed text-foreground sm:text-base">
               deploy a full antibiotic course and the population clears
               entirely. stop the course early — even at the same starting
@@ -95,7 +95,7 @@ export default function Landing() {
               resistance doesn&apos;t stay in one city.
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] lg:items-center">
+          <CardContent className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,360px)] md:items-center">
             <p className="text-sm leading-relaxed text-foreground sm:text-base">
               the surveillance view runs the same engine across a small grid
               of connected regions. treat one region heavily — it breeds
@@ -116,7 +116,7 @@ export default function Landing() {
               the rational move is to not make new antibiotics.
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] lg:items-center">
+          <CardContent className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,360px)] md:items-center">
             <p className="text-sm leading-relaxed text-foreground sm:text-base">
               you run a pharma company. with default incentives, investing
               in a new antibiotic loses money — the drug gets held in
